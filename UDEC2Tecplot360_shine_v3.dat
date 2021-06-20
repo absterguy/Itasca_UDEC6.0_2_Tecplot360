@@ -1,0 +1,384 @@
+;*********************************************************
+; -*- coding: GB2312 -*-
+; File Name:UDEC2Tecplot360_shine_v3.dat
+; Author:Shine
+; Email:shenhui19@mails.ucas.ac.cn
+; Website:geomatlab.com
+; Version:v3.0
+; Date:2021/6/20
+; Description:This FISH script is used to output the node 
+;			  coordinates, displacement, velocity and element 
+;			  stress of model in UDEC6.0 into the input format  
+;			  of Tecplot360 2017 or higher version.
+;			(The script successfully passed the test at Tecplot360 2017)
+; Function List:
+;		get function:
+;			@get_ngp:Get the total number of nodes and elements
+;			@get_Coor_Disp_Vel:Get nodal coordinates, displacement 
+;							   and velocity
+;			@get_Stress:Get element stress
+;		print function:
+;			@printCoord:Output node coordinates to file
+;			@printDisp:Output node displacement to file
+;			@printVel:Output node velocity to file
+;			@printStress:Output element stress to file
+;		ini function:
+;			@ini_fileout:Initialize output file information
+;		main fucntion:
+;			@udec2tecplot360:The main function used to control the output  
+;							 of all printed information
+; Usage: When the model calculation is completed, call this script to 
+;        output the model information to Tecplot360 for post-processing.
+;		 use command:call your_path/UDEC2Tecplot360_shine_v3.dat       
+;         __    _          
+;   _____/ /_  (_)___  ___ 
+;  / ___/ __ \/ / __ \/ _ \
+; (__  ) / / / / / / /  __/
+;/____/_/ /_/_/_/ /_/\___/ 
+;                                   _   _       _                         
+;                                  | | | |     | |                        
+;   __ _  ___  ___  _ __ ___   __ _| |_| | __ _| |__   ___ ___  _ __ ___  
+;  / _` |/ _ \/ _ \| '_ ` _ \ / _` | __| |/ _` | '_ \ / __/ _ \| '_ ` _ \ 
+; | (_| |  __/ (_) | | | | | | (_| | |_| | (_| | |_) | (_| (_) | | | | | |
+;  \__, |\___|\___/|_| |_| |_|\__,_|\__|_|\__,_|_.__(_)___\___/|_| |_| |_|
+;   __/ |                                                                 
+;  |___/                                                                  
+;
+;*********************************************************
+
+;===============================================
+;*************获取节点及单元总数****************
+;===============================================
+def get_ngp  
+    Num_gps = 0
+    Num_ele=0
+    
+    bi=block_head
+    loop while bi # 0
+      gi=b_gp(bi)
+      loop while gi # 0
+       	Num_gps=Num_gps+1
+        gi=gp_next(gi)
+      endloop
+    	bi=b_next(bi)
+  	endloop
+    
+    bi=block_head
+	loop while bi # 0
+		zi=b_zone(bi)
+		loop while zi # 0
+			Num_ele=Num_ele+1
+			zi=z_next(zi)
+		endloop
+		bi=b_next(bi)
+	endloop
+end
+get_ngp
+
+;===============================================
+;*************获取节点坐标、位移和速度**********
+;===============================================
+
+def get_Coor_Disp_Vel  ;定义节点坐标组并初始化
+array gpCoor(Num_gps,4)
+array gpDisp(Num_gps,2)
+array gpVel(Num_gps,2)
+loop i (1,Num_gps)
+	gpCoor(i,1)=0.0;
+	gpCoor(i,2)=0.0;
+	gpCoor(i,3)=0.0;
+	gpCoor(i,4)=0.0;
+endloop
+;
+kk=0
+bi=block_head
+loop while bi # 0
+  gi=b_gp(bi)
+  loop while gi # 0
+  	kk=kk+1
+  	gpCoor(kk,1)=gi ;gp id
+  	gpCoor(kk,2)=kk ;gp 计数同时编号
+  	gpCoor(kk,3)=gp_x(gi) ;gp x坐标
+  	gpCoor(kk,4)=gp_y(gi) ;gp y坐标
+  	gpDisp(kk,1)=gp_xdis(gi) ;gp xdisp
+  	gpDisp(kk,2)=gp_ydis(gi) ;gp ydisp
+	gpVel(kk,1)=gp_xvel(gi)
+	gpVel(kk,2)=gp_yvel(gi)
+  	gi=gp_next(gi)
+  endloop
+  bi=b_next(bi)
+endloop
+
+end
+get_Coor_Disp_Vel
+
+;===============================================
+;*************获取单元应力分量*****************
+;===============================================
+def get_Stress
+array z_gpnum(Num_ele,3)
+array zone_stress(Num_ele,3)
+znum=0
+bi=block_head
+loop while bi # 0
+	zi=b_zone(bi)
+	loop while zi # 0
+		znum=znum+1
+		el_sxx=z_sxx(zi)
+		el_syy=z_syy(zi)
+		el_sxy=z_sxy(zi)
+		loop i (1,3)
+			zgpi=z_gp(zi,i)
+			loop j (1,Num_gps)  			
+				if gpCoor(j,1)=zgpi
+					z_gpnum(znum,i)=gpCoor(j,2)  ;变换zone节点序号		
+				endif
+			endloop
+		endloop
+		zone_stress(znum,1)=el_sxx
+		zone_stress(znum,2)=el_syy
+		zone_stress(znum,3)=el_sxy
+		zi=z_next(zi)
+	endloop	
+	bi=b_next(bi)  	
+endloop
+
+end
+get_Stress  
+
+;===============================================
+;*************打印节点坐标****************
+;===============================================
+def printCoord
+array coorXY(1)
+loop i (1,node_print_rows)
+	num_label = rows_record*(i-1)+1
+	coorXY(1)=''
+	if i < node_print_rows then
+		loop j (1,rows_record)	
+		coorXY(1)=coorXY(1)+' '+string(gpCoor(num_label,xyComp))
+		num_label = num_label + 1
+		endloop
+	else
+		loop m (1,node_last_row_num)	
+		coorXY(1)=coorXY(1)+' '+string(gpCoor(num_label,xyComp))
+		num_label = num_label + 1
+		endloop
+	endif
+	status=write(coorXY,1)
+endloop
+end
+
+;===============================================
+;*************打印单元应力分量****************
+;===============================================
+def printStress
+array strXY(1)
+loop i (1,ele_print_rows)
+	num_label = rows_record*(i-1)+1
+	strXY(1)=''
+	if i < ele_print_rows then
+		loop j (1,rows_record)
+		strXY(1)=strXY(1)+' '+string(zone_stress(num_label,xyStr))
+		num_label = num_label + 1
+		endloop
+	else
+		loop m (1,ele_last_row_num)	
+		strXY(1)=strXY(1)+' '+string(zone_stress(num_label,xyStr))
+		num_label = num_label + 1
+		endloop
+	endif
+	status=write(strXY,1)
+endloop
+end
+
+;===============================================
+;*************打印节点位移分量****************
+;===============================================
+def printDisp
+array dispXY(1)
+loop i (1,node_print_rows)	
+	num_label = rows_record*(i-1)+1
+	dispXY(1)=''
+	if i < node_print_rows then
+		loop j (1,rows_record)
+		dispXY(1)=dispXY(1) +' ' + string(gpDisp(num_label,xyDisp))
+		num_label = num_label + 1
+		endloop
+	else
+		loop m (1,node_last_row_num)
+		dispXY(1)=dispXY(1) +' ' + string(gpDisp(num_label,xyDisp))
+		num_label = num_label + 1
+		endloop
+	endif
+	status=write(dispXY,1)
+endloop
+end
+
+;===============================================
+;*************打印节点速度分量****************
+;===============================================
+def printVel
+array velXY(1)
+loop i (1,node_print_rows)
+	num_label = rows_record*(i-1)+1
+	velXY(1)=''
+	if i < node_print_rows then
+		loop j (1,rows_record)
+		velXY(1)=velXY(1) +' ' + string(gpVel(num_label,xyVel))
+		num_label = num_label + 1
+		endloop
+	else
+		loop m (1,node_last_row_num)
+		velXY(1)=velXY(1) +' ' + string(gpVel(num_label,xyVel))
+		num_label = num_label + 1
+		endloop
+	endif
+	status=write(velXY,1)
+endloop
+end
+
+def ini_fileout
+	IO_READ  = 0
+    IO_WRITE = 1
+	IO_FISH  = 0
+	IO_ASCII = 1
+	array buf(1)
+    tec_file = 'udec_tec360_v3.dat'
+end
+ini_fileout
+
+def udec2tecplot360
+	status = open(tec_file,IO_WRITE,IO_ASCII)
+	;print header
+	buf(1) = 'TITLE = "UDEC6.0 TO TECPLOT360 MODIFIED BY SHINE"' 	 	
+	status = write(buf,1)	
+    buf(1) ='VARIABLES = "X(m)","Y(m)"'
+    buf(1)=buf(1)+',"SXX(Pa)","SYY(Pa)","SXY(Pa)"'
+    buf(1)=buf(1)+',"DIS-X(m)","DIS-Y(m)","DIS-MAG(m)"'  
+	buf(1)=buf(1)+',"VEL-X(m/s)","VEL-Y(m/s)","VEL-MAG(m/s)"'
+    status = write(buf,1)  
+    buf(1) ='ZONE T="TRI_1", DATAPACKING=BLOCK, NODES='+ string(Num_gps)
+  	buf(1)=buf(1)+', ELEMENTS='+string(Num_ele)+', ZONETYPE=FETRIANGLE'
+	buf(1)=buf(1)+', VARLOCATION=([3-5]=CELLCENTERED)'
+    status = write(buf,1)
+    ;print setup
+	;Set the number of prints per line
+	rows_record = 10
+	;Caculate the printed rows
+	node_var_rows = int(Num_gps)/int(rows_record)
+	node_rows_remainder = int(Num_gps - node_var_rows*rows_record)
+	ele_var_rows = int(Num_ele)/int(rows_record)
+	ele_rows_remainder = int(Num_ele - ele_var_rows*rows_record)
+	
+	if node_rows_remainder = 0
+		node_print_rows = node_var_rows
+	else
+		node_print_rows = node_var_rows + 1
+	endif
+	oo=out('node printed rows:'+string(node_print_rows))
+	if ele_rows_remainder = 0
+		ele_print_rows = ele_var_rows
+	else
+		ele_print_rows = ele_var_rows + 1
+	endif
+	oo=out('element printed rows:'+string(ele_print_rows))
+	;Caculate the number of last row
+	node_last_row_num = Num_gps-rows_record*(node_print_rows-1)
+	ele_last_row_num = Num_ele-rows_record*(ele_print_rows-1)
+	oo=out('node_last_row_num:'+string(node_node_last_row_num))
+	oo=out('ele_last_row_num:'+string(ele_node_last_row_num))
+	
+	loop var (1,11)
+	
+		caseof var 
+			case 1
+			xyComp=3
+			printCoord
+
+			case 2
+			xyComp=4
+			printCoord
+			
+			case 3 
+			xyStr=1
+			printStress
+			
+			case 4
+			xyStr=2
+			printStress
+			
+			case 5
+			xyStr=3
+			printStress
+			
+			case 6
+			xyDisp=1
+			printDisp
+			
+			case 7
+			xyDisp=2
+			printDisp
+			
+			case 8
+			loop i (1,node_print_rows)
+				
+				num_label = rows_record*(i-1)+1
+				buf(1)=''
+				if i < node_print_rows then
+					loop j (1,rows_record)	
+					Sum_dis=sqrt((gpDisp(num_label,1))^2+(gpDisp(num_label,2))^2)
+					buf(1)=buf(1) +' ' + string(Sum_dis)
+					num_label = num_label + 1	
+					endloop
+				else
+					loop m (1,node_last_row_num)	
+					Sum_dis=sqrt((gpDisp(num_label,1))^2+(gpDisp(num_label,2))^2)
+					buf(1)=buf(1) +' ' + string(Sum_dis)
+					num_label = num_label + 1	
+					endloop
+				endif
+				status=write(buf,1)
+			endloop
+			
+			case 9
+			xyVel=1
+			printVel
+			
+			case 10
+			xyVel=2
+			printVel
+			
+			case 11
+			loop i (1,node_print_rows)
+				
+				num_label = rows_record*(i-1)+1
+				buf(1)=''
+				if i < node_print_rows then
+					loop j (1,rows_record)	
+					Sum_vel=sqrt((gpVel(num_label,1))^2+(gpVel(num_label,2))^2)
+					buf(1)=buf(1) +' ' + string(Sum_vel)
+					num_label = num_label + 1	
+					endloop
+				else
+					loop m (1,node_last_row_num)	
+					Sum_vel=sqrt((gpVel(num_label,1))^2+(gpVel(num_label,2))^2)
+					buf(1)=buf(1) +' ' + string(Sum_vel)
+					num_label = num_label + 1	
+					endloop
+				endif
+				status=write(buf,1)
+			endloop
+
+		endcase
+
+    endloop
+    ;print node connection information
+	loop N (1,Num_ele)
+		buf(1) =string(z_gpnum(N,1))+' '+string(z_gpnum(N,2)) 
+		buf(1)=buf(1)+' '+string(z_gpnum(N,3))    	
+        status=write(buf,1)             
+    endloop
+   status = close
+end
+udec2tecplot360
